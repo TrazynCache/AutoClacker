@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
@@ -65,10 +65,10 @@ namespace AutoClacker.ViewModels
             OnPropertyChanged(nameof(IsKeyboardMode));
             OnPropertyChanged(nameof(IsClickModeVisible));
             OnPropertyChanged(nameof(IsHoldModeVisible));
-            OnPropertyChanged(nameof(IsPressModeVisible));
-            OnPropertyChanged(nameof(IsHoldModeVisibleKeyboard));
             OnPropertyChanged(nameof(IsClickDurationMode));
             OnPropertyChanged(nameof(IsHoldDurationMode));
+            OnPropertyChanged(nameof(IsPressModeVisible));
+            OnPropertyChanged(nameof(IsHoldModeVisibleKeyboard));
             OnPropertyChanged(nameof(IsKeyboardHoldDurationMode));
             OnPropertyChanged(nameof(IsTimerMode));
             OnPropertyChanged(nameof(IsRestrictedMode));
@@ -994,39 +994,6 @@ namespace AutoClacker.ViewModels
         protected void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-    }
-
-    public class RelayCommand : ICommand
-    {
-        private readonly Func<object, Task> executeAsync;
-        private readonly Func<object, bool> canExecute;
-
-        public RelayCommand(Func<object, Task> executeAsync, Func<object, bool> canExecute = null)
-        {
-            this.executeAsync = executeAsync;
-            this.canExecute = canExecute;
-        }
-
-        public RelayCommand(Action<object> execute, Func<object, bool> canExecute = null)
-            : this(o => Task.Run(() => execute(o)), canExecute)
-        {
-        }
-
-        public event EventHandler CanExecuteChanged
-        {
-            add { CommandManager.RequerySuggested += value; }
-            remove { CommandManager.RequerySuggested -= value; }
-        }
-
-        public bool CanExecute(object parameter) => canExecute == null || canExecute(parameter);
-
-        public async void Execute(object parameter)
-        {
-            if (CanExecute(parameter))
-            {
-                await executeAsync(parameter);
-            }
         }
     }
 }
