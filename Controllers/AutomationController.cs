@@ -393,6 +393,10 @@ namespace AutoClacker.Controllers
                 return;
             }
 
+            // Activate target application window
+            NativeMethods.SetForegroundWindow(process.MainWindowHandle);
+            await Task.Delay(50, token); // Allow time for window activation
+
             NativeMethods.GetClientRect(process.MainWindowHandle, out NativeMethods.RECT rect);
             int x = (rect.Right - rect.Left) / 2;
             int y = (rect.Bottom - rect.Top) / 2;
@@ -497,6 +501,7 @@ namespace AutoClacker.Controllers
             }
 
             TimeSpan holdDuration = duration ?? TimeSpan.MaxValue;
+            TimeSpan eventInterval = TimeSpan.FromMilliseconds(50); // Reduced frequency
 
             while (!cancellationToken.IsCancellationRequested && (duration == null || viewModel.GetRemainingDuration() > TimeSpan.Zero))
             {
@@ -522,6 +527,7 @@ namespace AutoClacker.Controllers
             }
 
             TimeSpan holdDuration = duration ?? TimeSpan.MaxValue;
+            TimeSpan eventInterval = TimeSpan.FromMilliseconds(50); // Reduced frequency
 
             while (!cancellationToken.IsCancellationRequested && (duration == null || viewModel.GetRemainingDuration() > TimeSpan.Zero))
             {
@@ -550,31 +556,43 @@ namespace AutoClacker.Controllers
             }
 
             Console.WriteLine($"MouseEventDown called for {settings.MouseButton}.");
-            NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[1];
-            inputs[0].type = NativeMethods.INPUT_MOUSE;
-            inputs[0].u.mi.dx = 0;
-            inputs[0].u.mi.dy = 0;
-            inputs[0].u.mi.mouseData = 0;
-            inputs[0].u.mi.time = 0;
-            inputs[0].u.mi.dwExtraInfo = IntPtr.Zero;
-
+            
+            uint downFlag;
             switch (settings.MouseButton)
             {
                 case "Left":
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_LEFTDOWN;
+                    downFlag = NativeMethods.MOUSEEVENTF_LEFTDOWN;
                     break;
                 case "Right":
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_RIGHTDOWN;
+                    downFlag = NativeMethods.MOUSEEVENTF_RIGHTDOWN;
                     break;
                 case "Middle":
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_MIDDLEDOWN;
+                    downFlag = NativeMethods.MOUSEEVENTF_MIDDLEDOWN;
                     break;
                 default:
                     Console.WriteLine($"Invalid MouseButton value '{settings.MouseButton}' in MouseEventDown. Using default 'Left'.");
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_LEFTDOWN;
+                    downFlag = NativeMethods.MOUSEEVENTF_LEFTDOWN;
                     break;
             }
-            NativeMethods.SendInput(1, inputs, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+
+            var input = new NativeMethods.INPUT
+            {
+                Type = NativeMethods.INPUT_MOUSE,
+                Data = new NativeMethods.InputUnion
+                {
+                    Mouse = new NativeMethods.MOUSEINPUT
+                    {
+                        dwFlags = downFlag,
+                        dx = 0,
+                        dy = 0,
+                        MouseData = 0,
+                        time = 0,
+                        dwExtraInfo = IntPtr.Zero
+                    }
+                }
+            };
+
+            NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
         }
 
         private void MouseEventUp(Settings settings)
@@ -592,45 +610,65 @@ namespace AutoClacker.Controllers
             }
 
             Console.WriteLine($"MouseEventUp called for {settings.MouseButton}.");
-            NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[1];
-            inputs[0].type = NativeMethods.INPUT_MOUSE;
-            inputs[0].u.mi.dx = 0;
-            inputs[0].u.mi.dy = 0;
-            inputs[0].u.mi.mouseData = 0;
-            inputs[0].u.mi.time = 0;
-            inputs[0].u.mi.dwExtraInfo = IntPtr.Zero;
-
+            
+            uint upFlag;
             switch (settings.MouseButton)
             {
                 case "Left":
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_LEFTUP;
+                    upFlag = NativeMethods.MOUSEEVENTF_LEFTUP;
                     break;
                 case "Right":
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_RIGHTUP;
+                    upFlag = NativeMethods.MOUSEEVENTF_RIGHTUP;
                     break;
                 case "Middle":
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_MIDDLEUP;
+                    upFlag = NativeMethods.MOUSEEVENTF_MIDDLEUP;
                     break;
                 default:
                     Console.WriteLine($"Invalid MouseButton value '{settings.MouseButton}' in MouseEventUp. Using default 'Left'.");
-                    inputs[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_LEFTUP;
+                    upFlag = NativeMethods.MOUSEEVENTF_LEFTUP;
                     break;
             }
-            NativeMethods.SendInput(1, inputs, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+
+            var input = new NativeMethods.INPUT
+            {
+                Type = NativeMethods.INPUT_MOUSE,
+                Data = new NativeMethods.InputUnion
+                {
+                    Mouse = new NativeMethods.MOUSEINPUT
+                    {
+                        dwFlags = upFlag,
+                        dx = 0,
+                        dy = 0,
+                        MouseData = 0,
+                        time = 0,
+                        dwExtraInfo = IntPtr.Zero
+                    }
+                }
+            };
+
+            NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
         }
 
         private void KeybdEvent(byte key, uint flags)
         {
             Console.WriteLine($"KeybdEvent called: Key={key}, Flags={flags}.");
-            NativeMethods.INPUT[] inputs = new NativeMethods.INPUT[1];
-            inputs[0].type = NativeMethods.INPUT_KEYBOARD;
-            inputs[0].u.ki.wVk = key;
-            inputs[0].u.ki.wScan = 0;
-            inputs[0].u.ki.dwFlags = flags;
-            inputs[0].u.ki.time = 0;
-            inputs[0].u.ki.dwExtraInfo = IntPtr.Zero;
+            var input = new NativeMethods.INPUT
+            {
+                Type = NativeMethods.INPUT_KEYBOARD,
+                Data = new NativeMethods.InputUnion
+                {
+                    Keyboard = new NativeMethods.KEYBDINPUT
+                    {
+                        wVk = key,
+                        wScan = 0,
+                        dwFlags = flags,
+                        time = 0,
+                        dwExtraInfo = IntPtr.Zero
+                    }
+                }
+            };
 
-            NativeMethods.SendInput(1, inputs, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+            NativeMethods.SendInput(1, new[] { input }, Marshal.SizeOf(typeof(NativeMethods.INPUT)));
         }
     }
 }

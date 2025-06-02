@@ -1,7 +1,7 @@
 # AutoClacker
 
 ## Version
-1.0.0.4 (as of May 28, 2025)
+1.0.0.5 (as of June 3, 2025)
 
 AutoClacker is a Windows application that automates mouse clicks and keyboard key presses. It supports global or application-restricted modes, making it suitable for offline tasks like automating actions in games or applications.
 
