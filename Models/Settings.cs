@@ -32,6 +32,8 @@ namespace AutoClacker.Models
         private TimeSpan totalDuration = TimeSpan.Zero;
         private string theme = "Light";
         private bool isTopmost = false;
+        private bool mouseAlternatePhysicalHoldMode = false;
+        private bool keyboardAlternatePhysicalHoldMode = false;
 
         [DataMember]
         public string ClickScope
@@ -185,6 +187,20 @@ namespace AutoClacker.Models
         {
             get => isTopmost;
             set { isTopmost = value; OnPropertyChanged(nameof(IsTopmost)); }
+        }
+
+        [DataMember]
+        public bool MouseAlternatePhysicalHoldMode
+        {
+            get => mouseAlternatePhysicalHoldMode;
+            set { mouseAlternatePhysicalHoldMode = value; OnPropertyChanged(nameof(MouseAlternatePhysicalHoldMode)); }
+        }
+
+        [DataMember]
+        public bool KeyboardAlternatePhysicalHoldMode
+        {
+            get => keyboardAlternatePhysicalHoldMode;
+            set { keyboardAlternatePhysicalHoldMode = value; OnPropertyChanged(nameof(KeyboardAlternatePhysicalHoldMode)); }
         }
 
         protected void OnPropertyChanged(string propertyName)

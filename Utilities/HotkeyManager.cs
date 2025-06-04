@@ -54,8 +54,10 @@ namespace AutoClacker.Utilities
             Console.WriteLine($"Hotkey registration: Key={key}, Modifiers={fsModifiers}, Success={success}");
             if (!success)
             {
-                throw new InvalidOperationException($"Failed to register hotkey: Key={key}, Modifiers={fsModifiers}. It may be in use by another application.");
+                // Log the error with more details if possible (e.g., Marshal.GetLastWin32Error())
+                Console.WriteLine($"Failed to register hotkey: Key={key}, Modifiers={fsModifiers}. Error Code: {Marshal.GetLastWin32Error()}. It may be in use by another application.");
             }
+            return success;
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

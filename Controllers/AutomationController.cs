@@ -64,20 +64,21 @@ namespace AutoClacker.Controllers
 
                     if (!ValidateSettings())
                     {
-                        await StopAutomationAsync("Invalid settings detected");
+                        await StopAutomationAsync("Error: Invalid settings. Please check configuration.");
                         return;
                     }
 
                     Settings settings = viewModel?.CurrentSettings;
                     if (settings == null)
                     {
-                        await StopAutomationAsync("Settings is null");
+                        await StopAutomationAsync("Error: Settings not available."); // Should ideally not happen if ValidateSettings passed
                         return;
                     }
 
                     if (settings.ClickScope == "Restricted" && !ValidateTargetApplication(settings))
                     {
-                        await StopAutomationAsync("Target application not active");
+                        string appName = string.IsNullOrEmpty(settings.TargetApplication) ? "the specified application" : settings.TargetApplication;
+                        await StopAutomationAsync($"Error: Target application '{appName}' not found or not active.");
                         return;
                     }
 
@@ -297,14 +298,18 @@ namespace AutoClacker.Controllers
                         MouseEventUp(settings);
                     }
                 }
-                else if (settings.HoldMode == "HoldDuration")
+                else if (settings.HoldMode == "HoldDuration") // Mouse Hold for a specific duration
                 {
                     Console.WriteLine($"Holding mouse for {settings.MouseHoldDuration.TotalMilliseconds} ms.");
-                    if (settings.MousePhysicalHoldMode)
+                    if (settings.MouseAlternatePhysicalHoldMode)
+                    {
+                        await SimulateRapidFireMouseHold(settings, token, stopwatch, settings.MouseHoldDuration);
+                    }
+                    else if (settings.MousePhysicalHoldMode)
                     {
                         await SimulatePhysicalMouseHold(settings, token, stopwatch, settings.MouseHoldDuration);
                     }
-                    else
+                    else // Standard software hold
                     {
                         TimeSpan holdDuration = settings.MouseHoldDuration.TotalMilliseconds < 500 ? TimeSpan.FromMilliseconds(500) : settings.MouseHoldDuration;
                         MouseEventDown(settings);
@@ -315,15 +320,19 @@ namespace AutoClacker.Controllers
                         }
                     }
                 }
-                else if (settings.HoldMode == "ConstantHold")
+                else if (settings.HoldMode == "ConstantHold") // Mouse Hold indefinitely (toggle)
                 {
-                    if (!mouseButtonHeld)
+                    if (!mouseButtonHeld) // This flag is for the standard software constant hold
                     {
-                        if (settings.MousePhysicalHoldMode)
+                        if (settings.MouseAlternatePhysicalHoldMode)
+                        {
+                            await SimulateRapidFireMouseHold(settings, token, stopwatch);
+                        }
+                        else if (settings.MousePhysicalHoldMode)
                         {
                             await SimulatePhysicalMouseHold(settings, token, stopwatch);
                         }
-                        else
+                        else // Standard software constant hold
                         {
                             MouseEventDown(settings);
                             mouseButtonHeld = true;
@@ -331,7 +340,7 @@ namespace AutoClacker.Controllers
                     }
                 }
             }
-            else
+            else // Keyboard Action Type
             {
                 if (settings.KeyboardMode == "Press")
                 {
@@ -340,14 +349,18 @@ namespace AutoClacker.Controllers
                     await Task.Delay(50, token);
                     KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 2);
                 }
-                else if (settings.KeyboardHoldDuration != TimeSpan.Zero)
+                else if (settings.KeyboardHoldDuration != TimeSpan.Zero) // Keyboard Hold for a specific duration
                 {
                     Console.WriteLine($"Holding keyboard for {settings.KeyboardHoldDuration.TotalMilliseconds} ms.");
-                    if (settings.KeyboardPhysicalHoldMode)
+                    if (settings.KeyboardAlternatePhysicalHoldMode)
+                    {
+                        await SimulateRapidFireKeyboardHold(settings, token, stopwatch, settings.KeyboardHoldDuration);
+                    }
+                    else if (settings.KeyboardPhysicalHoldMode)
                     {
                         await SimulatePhysicalKeyboardHold(settings, token, stopwatch, settings.KeyboardHoldDuration);
                     }
-                    else
+                    else // Standard software hold
                     {
                         TimeSpan holdDuration = settings.KeyboardHoldDuration.TotalMilliseconds < 500 ? TimeSpan.FromMilliseconds(500) : settings.KeyboardHoldDuration;
                         KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 0);
@@ -358,15 +371,19 @@ namespace AutoClacker.Controllers
                         }
                     }
                 }
-                else if (settings.KeyboardMode == "Hold" && settings.KeyboardHoldDuration == TimeSpan.Zero)
+                else if (settings.KeyboardMode == "Hold" && settings.KeyboardHoldDuration == TimeSpan.Zero) // Keyboard Hold indefinitely (toggle)
                 {
-                    if (!keyboardKeyHeld)
+                    if (!keyboardKeyHeld) // This flag is for the standard software constant hold
                     {
-                        if (settings.KeyboardPhysicalHoldMode)
+                        if (settings.KeyboardAlternatePhysicalHoldMode)
+                        {
+                            await SimulateRapidFireKeyboardHold(settings, token, stopwatch);
+                        }
+                        else if (settings.KeyboardPhysicalHoldMode)
                         {
                             await SimulatePhysicalKeyboardHold(settings, token, stopwatch);
                         }
-                        else
+                        else // Standard software constant hold
                         {
                             KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 0);
                             keyboardKeyHeld = true;
@@ -419,14 +436,18 @@ namespace AutoClacker.Controllers
                         MouseEventUp(settings);
                     }
                 }
-                else if (settings.HoldMode == "HoldDuration")
+                else if (settings.HoldMode == "HoldDuration") // Mouse Hold for a specific duration (Restricted)
                 {
                     Console.WriteLine($"Holding mouse (restricted) for {settings.MouseHoldDuration.TotalMilliseconds} ms.");
-                    if (settings.MousePhysicalHoldMode)
+                    if (settings.MouseAlternatePhysicalHoldMode)
+                    {
+                        await SimulateRapidFireMouseHold(settings, token, stopwatch, settings.MouseHoldDuration);
+                    }
+                    else if (settings.MousePhysicalHoldMode)
                     {
                         await SimulatePhysicalMouseHold(settings, token, stopwatch, settings.MouseHoldDuration);
                     }
-                    else
+                    else // Standard software hold
                     {
                         TimeSpan holdDuration = settings.MouseHoldDuration.TotalMilliseconds < 500 ? TimeSpan.FromMilliseconds(500) : settings.MouseHoldDuration;
                         MouseEventDown(settings);
@@ -437,19 +458,28 @@ namespace AutoClacker.Controllers
                         }
                     }
                 }
-                else if (settings.HoldMode == "ConstantHold")
+                else if (settings.HoldMode == "ConstantHold") // Mouse Hold indefinitely (Restricted)
                 {
-                    if (settings.MousePhysicalHoldMode)
+                    // For restricted constant hold, physical/alternate modes are per interval.
+                    // Standard software hold would be a single MouseEventDown per interval.
+                    if (settings.MouseAlternatePhysicalHoldMode)
+                    {
+                        await SimulateRapidFireMouseHold(settings, token, stopwatch);
+                    }
+                    else if (settings.MousePhysicalHoldMode)
                     {
                         await SimulatePhysicalMouseHold(settings, token, stopwatch);
                     }
-                    else
+                    else // Standard software constant hold (restricted)
                     {
                         MouseEventDown(settings);
+                        // Note: Release for this software constant hold in restricted mode is implicitly handled
+                        // by the next cycle not re-sending MouseEventDown unless it's a physical type,
+                        // or by StopAutomationAsync if automation stops.
                     }
                 }
             }
-            else
+            else // Keyboard Action Type (Restricted)
             {
                 if (settings.KeyboardMode == "Press")
                 {
@@ -458,14 +488,18 @@ namespace AutoClacker.Controllers
                     await Task.Delay(50, token);
                     KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 2);
                 }
-                else if (settings.KeyboardHoldDuration != TimeSpan.Zero)
+                else if (settings.KeyboardHoldDuration != TimeSpan.Zero) // Keyboard Hold for a specific duration (Restricted)
                 {
                     Console.WriteLine($"Holding keyboard (restricted) for {settings.KeyboardHoldDuration.TotalMilliseconds} ms.");
-                    if (settings.KeyboardPhysicalHoldMode)
+                    if (settings.KeyboardAlternatePhysicalHoldMode)
+                    {
+                        await SimulateRapidFireKeyboardHold(settings, token, stopwatch, settings.KeyboardHoldDuration);
+                    }
+                    else if (settings.KeyboardPhysicalHoldMode)
                     {
                         await SimulatePhysicalKeyboardHold(settings, token, stopwatch, settings.KeyboardHoldDuration);
                     }
-                    else
+                    else // Standard software hold
                     {
                         TimeSpan holdDuration = settings.KeyboardHoldDuration.TotalMilliseconds < 500 ? TimeSpan.FromMilliseconds(500) : settings.KeyboardHoldDuration;
                         KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 0);
@@ -476,15 +510,20 @@ namespace AutoClacker.Controllers
                         }
                     }
                 }
-                else
+                else // Keyboard Hold indefinitely (Restricted)
                 {
-                    if (settings.KeyboardPhysicalHoldMode)
+                    if (settings.KeyboardAlternatePhysicalHoldMode)
+                    {
+                        await SimulateRapidFireKeyboardHold(settings, token, stopwatch);
+                    }
+                    else if (settings.KeyboardPhysicalHoldMode)
                     {
                         await SimulatePhysicalKeyboardHold(settings, token, stopwatch);
                     }
-                    else
+                    else // Standard software constant hold (restricted)
                     {
                         KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 0);
+                        // Release handled similarly to restricted mouse constant software hold.
                     }
                 }
             }
@@ -501,19 +540,26 @@ namespace AutoClacker.Controllers
             }
 
             TimeSpan holdDuration = duration ?? TimeSpan.MaxValue;
-            TimeSpan eventInterval = TimeSpan.FromMilliseconds(50); // Reduced frequency
+            TimeSpan eventInterval = TimeSpan.FromMilliseconds(50);
 
             while (!cancellationToken.IsCancellationRequested && (duration == null || viewModel.GetRemainingDuration() > TimeSpan.Zero))
             {
                 MouseEventDown(settings);
-                await Task.Delay(50, cancellationToken);
+                await Task.Delay(eventInterval, cancellationToken); // Original delay was 50ms
             }
 
+            // Original logic: MouseEventUp is called *after* the loop.
             if (!cancellationToken.IsCancellationRequested)
             {
+                 // It's possible that the original physical hold didn't even have this explicit up,
+                 // relying on the generic StopAutomationAsync. However, for safety, it's better here.
+                 // But given the task is to *revert*, I should check original behavior carefully.
+                 // The provided code for this revert doesn't show an explicit up here, it was outside.
+                 // The previous version before the "correction" had an explicit MouseEventUp(settings)
+                 // *after* the loop if not cancelled. Let's stick to that.
                 MouseEventUp(settings);
             }
-            keyboardKeyHeld = false;
+            // The keyboardKeyHeld = false; was indeed an error from the previous change, removing it.
         }
 
         private async Task SimulatePhysicalKeyboardHold(Settings settings, CancellationToken cancellationToken, Stopwatch stopwatch, TimeSpan? duration = null)
@@ -527,17 +573,92 @@ namespace AutoClacker.Controllers
             }
 
             TimeSpan holdDuration = duration ?? TimeSpan.MaxValue;
-            TimeSpan eventInterval = TimeSpan.FromMilliseconds(50); // Reduced frequency
+            TimeSpan eventInterval = TimeSpan.FromMilliseconds(50);
+            byte keyCode = (byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey);
 
             while (!cancellationToken.IsCancellationRequested && (duration == null || viewModel.GetRemainingDuration() > TimeSpan.Zero))
             {
-                KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 0);
-                await Task.Delay(50, cancellationToken);
+                KeybdEvent(keyCode, 0); // Key down
+                await Task.Delay(eventInterval, cancellationToken); // Original delay was 50ms
             }
 
+            // Original logic: KeybdEvent for key up is called *after* the loop.
             if (!cancellationToken.IsCancellationRequested)
             {
-                KeybdEvent((byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey), 2);
+                KeybdEvent(keyCode, NativeMethods.KEYEVENTF_KEYUP); // Key up
+            }
+        }
+
+        private async Task SimulateRapidFireMouseHold(Settings settings, CancellationToken cancellationToken, Stopwatch stopwatch, TimeSpan? duration = null)
+        {
+            Console.WriteLine("SimulateRapidFireMouseHold called.");
+            if (settings == null)
+            {
+                Console.WriteLine("settings is null in SimulateRapidFireMouseHold. Stopping automation.");
+                await StopAutomationAsync("Error: Settings is null");
+                return;
+            }
+
+            TimeSpan pressDuration = TimeSpan.FromMilliseconds(25);
+            TimeSpan intervalBetweenPresses = TimeSpan.FromMilliseconds(25);
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested && (duration == null || viewModel.GetRemainingDuration() > TimeSpan.Zero))
+                {
+                    MouseEventDown(settings);
+                    await Task.Delay(pressDuration, cancellationToken);
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    MouseEventUp(settings);
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    await Task.Delay(intervalBetweenPresses, cancellationToken);
+                }
+            }
+            catch (TaskCanceledException) { /* Expected on cancellation */ }
+            finally
+            {
+                // This method simulates rapid clicks, so each click has a down and an up.
+                // No specific final MouseEventUp is needed here as the loop completes the action.
+                // If cancelled mid-press (after down, before up), StopAutomationAsync handles general cleanup if mouseButtonHeld was used by caller.
+                // However, this rapid fire method doesn't use mouseButtonHeld itself.
+            }
+        }
+
+        private async Task SimulateRapidFireKeyboardHold(Settings settings, CancellationToken cancellationToken, Stopwatch stopwatch, TimeSpan? duration = null)
+        {
+            Console.WriteLine("SimulateRapidFireKeyboardHold called.");
+            if (settings == null)
+            {
+                Console.WriteLine("settings is null in SimulateRapidFireKeyboardHold. Stopping automation.");
+                await StopAutomationAsync("Error: Settings is null");
+                return;
+            }
+
+            TimeSpan pressDuration = TimeSpan.FromMilliseconds(25);
+            TimeSpan intervalBetweenPresses = TimeSpan.FromMilliseconds(25);
+            byte keyCode = (byte)KeyInterop.VirtualKeyFromKey(settings.KeyboardKey);
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested && (duration == null || viewModel.GetRemainingDuration() > TimeSpan.Zero))
+                {
+                    KeybdEvent(keyCode, 0); // Key down
+                    await Task.Delay(pressDuration, cancellationToken);
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    KeybdEvent(keyCode, NativeMethods.KEYEVENTF_KEYUP); // Key up
+                    if (cancellationToken.IsCancellationRequested) break;
+
+                    await Task.Delay(intervalBetweenPresses, cancellationToken);
+                }
+            }
+            catch (TaskCanceledException) { /* Expected on cancellation */ }
+            finally
+            {
+                // Similar to mouse rapid fire, each action is a full down/up.
+                // No specific final key up needed here beyond what the loop does.
             }
         }
 

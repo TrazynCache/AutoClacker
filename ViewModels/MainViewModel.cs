@@ -37,6 +37,9 @@ namespace AutoClacker.ViewModels
         private int remainingDurationMs;
         private DateTime? durationStartTime;
 
+        // Backing fields for AlternatePhysicalHoldMode are not strictly needed
+        // as properties will directly access settings object.
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         public MainViewModel()
@@ -84,7 +87,12 @@ namespace AutoClacker.ViewModels
         {
             this.window = window;
             hotkeyManager = new HotkeyManager(window, this);
-            hotkeyManager.RegisterTriggerHotkey(settings.TriggerKey, settings.TriggerKeyModifiers);
+            if (!hotkeyManager.RegisterTriggerHotkey(settings.TriggerKey, settings.TriggerKeyModifiers))
+            {
+                string message = $"Failed to register hotkey {settings.TriggerKey} (Modifiers: {settings.TriggerKeyModifiers}). It might be in use by another application or invalid.";
+                UpdateStatus(message, "OrangeRed"); // A distinct error color
+                MessageBox.Show(System.Windows.Application.Current.MainWindow, message, "Hotkey Registration Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             window.Topmost = settings.IsTopmost;
         }
 
@@ -383,9 +391,17 @@ namespace AutoClacker.ViewModels
             get => settings.MousePhysicalHoldMode;
             set
             {
-                settings.MousePhysicalHoldMode = value;
-                OnPropertyChanged(nameof(MousePhysicalHoldMode));
-                SettingsManager.SaveSettings(settings);
+                if (settings.MousePhysicalHoldMode != value)
+                {
+                    settings.MousePhysicalHoldMode = value;
+                    OnPropertyChanged(nameof(MousePhysicalHoldMode));
+                    if (value && settings.MouseAlternatePhysicalHoldMode)
+                    {
+                        // Use the public property setter to ensure its logic (including OnPropertyChanged) is triggered
+                        MouseAlternatePhysicalHoldMode = false;
+                    }
+                    SettingsManager.SaveSettings(settings);
+                }
             }
         }
 
@@ -459,9 +475,55 @@ namespace AutoClacker.ViewModels
             get => settings.KeyboardPhysicalHoldMode;
             set
             {
-                settings.KeyboardPhysicalHoldMode = value;
-                OnPropertyChanged(nameof(KeyboardPhysicalHoldMode));
-                SettingsManager.SaveSettings(settings);
+                if (settings.KeyboardPhysicalHoldMode != value)
+                {
+                    settings.KeyboardPhysicalHoldMode = value;
+                    OnPropertyChanged(nameof(KeyboardPhysicalHoldMode));
+                    if (value && settings.KeyboardAlternatePhysicalHoldMode)
+                    {
+                        // Use the public property setter
+                        KeyboardAlternatePhysicalHoldMode = false;
+                    }
+                    SettingsManager.SaveSettings(settings);
+                }
+            }
+        }
+
+        public bool MouseAlternatePhysicalHoldMode
+        {
+            get => settings.MouseAlternatePhysicalHoldMode;
+            set
+            {
+                if (settings.MouseAlternatePhysicalHoldMode != value)
+                {
+                    settings.MouseAlternatePhysicalHoldMode = value;
+                    OnPropertyChanged(nameof(MouseAlternatePhysicalHoldMode));
+                    if (value && settings.MousePhysicalHoldMode)
+                    {
+                        // Use the public property setter
+                        MousePhysicalHoldMode = false;
+                    }
+                    SettingsManager.SaveSettings(settings);
+                }
+            }
+        }
+
+        public bool KeyboardAlternatePhysicalHoldMode
+        {
+            get => settings.KeyboardAlternatePhysicalHoldMode;
+            set
+            {
+                if (settings.KeyboardAlternatePhysicalHoldMode != value)
+                {
+                    settings.KeyboardAlternatePhysicalHoldMode = value;
+                    OnPropertyChanged(nameof(KeyboardAlternatePhysicalHoldMode));
+                    if (value && settings.KeyboardPhysicalHoldMode)
+                    {
+                        // Use the public property setter
+                        KeyboardPhysicalHoldMode = false;
+                    }
+                    SettingsManager.SaveSettings(settings);
+                }
             }
         }
 
@@ -474,7 +536,20 @@ namespace AutoClacker.ViewModels
                 OnPropertyChanged(nameof(TriggerKey));
                 OnPropertyChanged(nameof(TriggerKeyDisplay));
                 SettingsManager.SaveSettings(settings);
-                hotkeyManager?.RegisterTriggerHotkey(value, settings.TriggerKeyModifiers);
+                if (hotkeyManager != null && !hotkeyManager.RegisterTriggerHotkey(value, settings.TriggerKeyModifiers))
+                {
+                    string message = $"Failed to register hotkey {value} (Modifiers: {settings.TriggerKeyModifiers}). It might be in use or invalid.";
+                    UpdateStatus(message, "OrangeRed");
+                    MessageBox.Show(System.Windows.Application.Current.MainWindow, message, "Hotkey Registration Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else if (hotkeyManager != null)
+                {
+                    // If successful and status was an error, clear it or set to a neutral message
+                    if (StatusText.StartsWith("Failed to register hotkey"))
+                    {
+                        UpdateStatus($"Hotkey set to {value}", "Black"); // Or whatever the default color is
+                    }
+                }
             }
         }
 
@@ -488,7 +563,20 @@ namespace AutoClacker.ViewModels
                 settings.TriggerKeyModifiers = value;
                 OnPropertyChanged(nameof(TriggerKeyModifiers));
                 SettingsManager.SaveSettings(settings);
-                hotkeyManager?.RegisterTriggerHotkey(settings.TriggerKey, value);
+                if (hotkeyManager != null && !hotkeyManager.RegisterTriggerHotkey(settings.TriggerKey, value))
+                {
+                    string message = $"Failed to register hotkey {settings.TriggerKey} (Modifiers: {value}). It might be in use or invalid.";
+                    UpdateStatus(message, "OrangeRed");
+                    MessageBox.Show(System.Windows.Application.Current.MainWindow, message, "Hotkey Registration Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                 else if (hotkeyManager != null)
+                {
+                    // If successful and status was an error, clear it or set to a neutral message
+                    if (StatusText.StartsWith("Failed to register hotkey"))
+                    {
+                         UpdateStatus($"Hotkey modifiers set for {settings.TriggerKey}", "Black");
+                    }
+                }
             }
         }
 
@@ -719,56 +807,87 @@ namespace AutoClacker.ViewModels
         {
             try
             {
+                UpdateStatus("Press a key to set the toggle key. Press Esc to cancel.", "Blue");
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     isSettingToggleKey = true;
                     isSettingKeyboardKey = false;
                     capturedKey = Key.None;
+                    ModifierKeys capturedModifiers = ModifierKeys.None; // Reset modifiers for this capture
+
                     var dialog = new Window
                     {
                         Title = "Set Toggle Key",
                         Content = new System.Windows.Controls.TextBlock
                         {
-                            Text = "Press a key to set the toggle key. Press Esc to cancel.",
+                            Text = "Press a key combination to set the toggle key. Press Esc to cancel.",
                             Margin = new Thickness(10)
                         },
-                        Width = 300,
+                        Width = 350,
                         Height = 100,
                         WindowStartupLocation = WindowStartupLocation.CenterOwner,
                         Owner = System.Windows.Application.Current.MainWindow
                     };
-                    // Apply the current theme
                     dialog.Resources.MergedDictionaries.Add(new ResourceDictionary
                     {
                         Source = new Uri($"/Themes/{settings.Theme}Theme.xaml", UriKind.Relative)
                     });
-                    dialog.Show();
                     dialog.KeyDown += (s, e) =>
                     {
                         if (e.Key == Key.Escape)
                         {
                             capturedKey = Key.None;
                             isSettingToggleKey = false;
+                            UpdateStatus("Toggle key setting cancelled.", "OrangeRed");
                             dialog.Close();
                             return;
                         }
-                        capturedKey = e.Key;
-                        if (e.KeyboardDevice.IsKeyDown(Key.LeftCtrl) || e.KeyboardDevice.IsKeyDown(Key.RightCtrl))
-                            TriggerKeyModifiers |= ModifierKeys.Control;
-                        if (e.KeyboardDevice.IsKeyDown(Key.LeftShift) || e.KeyboardDevice.IsKeyDown(Key.RightShift))
-                            TriggerKeyModifiers |= ModifierKeys.Shift;
-                        if (e.KeyboardDevice.IsKeyDown(Key.LeftAlt) || e.KeyboardDevice.IsKeyDown(Key.RightAlt))
-                            TriggerKeyModifiers |= ModifierKeys.Alt;
-                        TriggerKey = capturedKey;
-                        isSettingToggleKey = false;
-                        dialog.Close();
+                        // Capture the primary key (excluding modifiers themselves if they are pressed alone)
+                        if (e.Key != Key.LeftCtrl && e.Key != Key.RightCtrl &&
+                            e.Key != Key.LeftShift && e.Key != Key.RightShift &&
+                            e.Key != Key.LeftAlt && e.Key != Key.RightAlt &&
+                            e.Key != Key.LWin && e.Key != Key.RWin && e.Key != Key.System)
+                        {
+                            capturedKey = e.Key;
+                        }
+
+                        // Capture modifiers
+                        capturedModifiers = ModifierKeys.None; // Reset before checking current state
+                        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+                            capturedModifiers |= ModifierKeys.Control;
+                        if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+                            capturedModifiers |= ModifierKeys.Shift;
+                        if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt))
+                            capturedModifiers |= ModifierKeys.Alt;
+                        if (Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin))
+                            capturedModifiers |= ModifierKeys.Windows;
+
+                        // A hotkey must have a non-modifier key.
+                        if (capturedKey != Key.None && capturedKey != Key.DeadCharProcessed)
+                        {
+                            TriggerKeyModifiers = capturedModifiers; // Set modifiers first
+                            TriggerKey = capturedKey;             // Then set the key (which triggers registration)
+                            isSettingToggleKey = false;
+                            UpdateStatus($"Toggle key set to {TriggerKeyModifiers} + {TriggerKey}", "Green");
+                            dialog.Close();
+                        }
+                        // If only a modifier was pressed, keep dialog open and wait for a non-modifier key
                     };
+                    dialog.Closed += (s, e) => {
+                        isSettingToggleKey = false;
+                        if (StatusText == "Press a key to set the toggle key. Press Esc to cancel.") // If closed without selection
+                        {
+                            UpdateStatus("Toggle key setting cancelled or no key selected.", "OrangeRed");
+                        }
+                    };
+                    dialog.ShowDialog(); // Use ShowDialog to make it modal
                 });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error in SetTriggerKey: {ex.Message}");
-                System.Windows.MessageBox.Show($"Failed to set toggle key: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                UpdateStatus($"Error setting toggle key: {ex.Message}", "Red");
+                MessageBox.Show(System.Windows.Application.Current.MainWindow, $"Failed to set toggle key: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -776,6 +895,7 @@ namespace AutoClacker.ViewModels
         {
             try
             {
+                UpdateStatus("Press a key to set the action key. Press Esc to cancel.", "Blue");
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     isSettingKeyboardKey = true;
@@ -783,44 +903,60 @@ namespace AutoClacker.ViewModels
                     capturedKey = Key.None;
                     var dialog = new Window
                     {
-                        Title = "Set Key",
+                        Title = "Set Action Key",
                         Content = new System.Windows.Controls.TextBlock
                         {
-                            Text = "Press a key to set the keyboard key. Press Esc to cancel.",
+                            Text = "Press a key to set the action key for keyboard mode. Press Esc to cancel.",
                             Margin = new Thickness(10)
                         },
-                        Width = 300,
+                        Width = 350,
                         Height = 100,
                         WindowStartupLocation = WindowStartupLocation.CenterOwner,
                         Owner = System.Windows.Application.Current.MainWindow
                     };
-                    // Apply the current theme
                     dialog.Resources.MergedDictionaries.Add(new ResourceDictionary
                     {
                         Source = new Uri($"/Themes/{settings.Theme}Theme.xaml", UriKind.Relative)
                     });
-                    dialog.Show();
                     dialog.KeyDown += (s, e) =>
                     {
                         if (e.Key == Key.Escape)
                         {
                             capturedKey = Key.None;
                             isSettingKeyboardKey = false;
+                            UpdateStatus("Action key setting cancelled.", "OrangeRed");
                             dialog.Close();
                             return;
                         }
-                        capturedKey = e.Key;
-                        KeyboardKey = capturedKey;
-                        OnPropertyChanged(nameof(KeyboardKeyDisplay));
-                        isSettingKeyboardKey = false;
-                        dialog.Close();
+                        // Capture the primary key (excluding modifiers)
+                        if (e.Key != Key.LeftCtrl && e.Key != Key.RightCtrl &&
+                            e.Key != Key.LeftShift && e.Key != Key.RightShift &&
+                            e.Key != Key.LeftAlt && e.Key != Key.RightAlt &&
+                            e.Key != Key.LWin && e.Key != Key.RWin && e.Key != Key.System &&
+                            e.Key != Key.DeadCharProcessed && e.Key != Key.None)
+                        {
+                            capturedKey = e.Key;
+                            KeyboardKey = capturedKey; // This updates the KeyboardKeyDisplay via OnPropertyChanged
+                            isSettingKeyboardKey = false;
+                            UpdateStatus($"Action key set to {KeyboardKeyDisplay}", "Green");
+                            dialog.Close();
+                        }
                     };
+                     dialog.Closed += (s, e) => {
+                        isSettingKeyboardKey = false;
+                        if (StatusText == "Press a key to set the action key. Press Esc to cancel.") // If closed without selection
+                        {
+                            UpdateStatus("Action key setting cancelled or no key selected.", "OrangeRed");
+                        }
+                    };
+                    dialog.ShowDialog(); // Use ShowDialog
                 });
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error in SetKey: {ex.Message}");
-                System.Windows.MessageBox.Show($"Failed to set key: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                UpdateStatus($"Error setting action key: {ex.Message}", "Red");
+                MessageBox.Show(System.Windows.Application.Current.MainWindow, $"Failed to set action key: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -884,6 +1020,8 @@ namespace AutoClacker.ViewModels
                 settings.KeyboardMode = "Press";
                 settings.KeyboardHoldDuration = TimeSpan.Zero;
                 settings.KeyboardPhysicalHoldMode = false;
+                settings.MouseAlternatePhysicalHoldMode = false;
+                settings.KeyboardAlternatePhysicalHoldMode = false;
                 settings.TriggerKey = Key.F5;
                 settings.TriggerKeyModifiers = ModifierKeys.None;
                 settings.Interval = TimeSpan.FromSeconds(2);
@@ -898,8 +1036,15 @@ namespace AutoClacker.ViewModels
                 {
                     hotkeyManager?.Dispose();
                     hotkeyManager = new HotkeyManager(window, this);
-                    hotkeyManager.RegisterTriggerHotkey(settings.TriggerKey, settings.TriggerKeyModifiers);
+                    if (!hotkeyManager.RegisterTriggerHotkey(settings.TriggerKey, settings.TriggerKeyModifiers))
+                    {
+                        string message = $"Failed to register hotkey {settings.TriggerKey} (Modifiers: {settings.TriggerKeyModifiers}) after reset. It might be in use or invalid.";
+                        UpdateStatus(message, "OrangeRed");
+                        MessageBox.Show(System.Windows.Application.Current.MainWindow, message, "Hotkey Registration Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
                 }
+
+                UpdateStatus("Settings reset to default.", "DarkSlateGray");
 
                 OnPropertyChanged(nameof(ClickScope));
                 OnPropertyChanged(nameof(TargetApplication));
@@ -923,6 +1068,8 @@ namespace AutoClacker.ViewModels
                 OnPropertyChanged(nameof(KeyboardHoldDurationSeconds));
                 OnPropertyChanged(nameof(KeyboardHoldDurationMilliseconds));
                 OnPropertyChanged(nameof(KeyboardPhysicalHoldMode));
+                OnPropertyChanged(nameof(MouseAlternatePhysicalHoldMode));
+                OnPropertyChanged(nameof(KeyboardAlternatePhysicalHoldMode));
                 OnPropertyChanged(nameof(TriggerKey));
                 OnPropertyChanged(nameof(TriggerKeyDisplay));
                 OnPropertyChanged(nameof(TriggerKeyModifiers));
