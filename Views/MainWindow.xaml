@@ -240,7 +240,7 @@
             </StackPanel>
 
             <!-- Footer Label -->
-            <Label Grid.Row="4" Grid.Column="1" Content="Creation of TrazynCache, 2025" HorizontalAlignment="Right" VerticalAlignment="Bottom" FontSize="10" Foreground="Gray"/>
+            <Label Grid.Row="4" Grid.Column="1" Content="Creation of IronAdamant, 2025" HorizontalAlignment="Right" VerticalAlignment="Bottom" FontSize="10" Foreground="Gray"/>
         </Grid>
     </Grid>
 </Window>
